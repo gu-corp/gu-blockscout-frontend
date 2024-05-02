@@ -148,6 +148,11 @@ const Footer = () => {
     columnGap: { lg: '32px', xl: '100px' },
   };
 
+  if (config.UI.footer.disabled) {
+    // eslint-disable-next-line react/jsx-no-useless-fragment
+    return <></>;
+  }
+
   if (config.UI.footer.links) {
     return (
       <Grid { ...containerProps }>
