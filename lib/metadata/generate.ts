@@ -18,17 +18,17 @@ export default function generate<Pathname extends Route['pathname']>(route: Rout
     network_title: getNetworkTitle(),
   };
 
-  const compiledTitle = compileValue(templates.title.make(route.pathname, Boolean(apiData)), params);
-  const title = compiledTitle ? compiledTitle + (config.meta.promoteBlockscoutInTitle ? ' | Blockscout' : '') : '';
+  // const compiledTitle = compileValue(templates.title.make(route.pathname, Boolean(apiData)), params);
+  // const title = compiledTitle ? compiledTitle + (config.meta.promoteBlockscoutInTitle ? ' | Blockscout' : '') : '';
   const description = compileValue(templates.description.make(route.pathname), params);
 
   const pageOgType = getPageOgType(route.pathname);
 
   return {
-    title: title,
+    title: 'Block Explorer',
     description,
     opengraph: {
-      title: title,
+      title: 'Block Explorer',
       description: pageOgType !== 'Regular page' ? config.meta.og.description : '',
       imageUrl: pageOgType !== 'Regular page' ? config.meta.og.imageUrl : '',
     },

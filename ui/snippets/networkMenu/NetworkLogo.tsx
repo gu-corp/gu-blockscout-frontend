@@ -51,6 +51,22 @@ const NetworkLogo = ({ isCollapsed, onClick, imageProps }: Props) => {
   const logoStyle = useColorModeValue({}, !config.UI.sidebar.logo.dark ? darkModeFilter : {});
   const iconStyle = useColorModeValue({}, !config.UI.sidebar.icon.dark ? darkModeFilter : {});
 
+  if (config.UI.sidebar.disabledNetworkLogo) {
+    return (
+      <Box
+        as="a"
+        href={ route({ pathname: '/' }) }
+        width={{ base: '120px', lg: isCollapsed === false ? '120px' : '30px', xl: isCollapsed ? '30px' : '120px' }}
+        height={{ base: '24px', lg: isCollapsed === false ? '24px' : '30px', xl: isCollapsed ? '30px' : '24px' }}
+        display="inline-flex"
+        overflow="hidden"
+        onClick={ onClick }
+        flexShrink={ 0 }
+        aria-label="Link to main page"
+      >Home</Box>
+    );
+  }
+
   return (
     <Box
       as="a"

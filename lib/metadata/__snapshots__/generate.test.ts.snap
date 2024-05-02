@@ -6,9 +6,9 @@ exports[`generates correct metadata for: dynamic route 1`] = `
   "opengraph": {
     "description": "",
     "imageUrl": "",
-    "title": "Blockscout transaction 0x12345 | Blockscout",
+    "title": "Block Explorer",
   },
-  "title": "Blockscout transaction 0x12345 | Blockscout",
+  "title": "Block Explorer",
 }
 `;
 
@@ -18,9 +18,9 @@ exports[`generates correct metadata for: dynamic route with API data 1`] = `
   "opengraph": {
     "description": "",
     "imageUrl": "",
-    "title": "Blockscout USDT token details | Blockscout",
+    "title": "Block Explorer",
   },
-  "title": "Blockscout USDT token details | Blockscout",
+  "title": "Block Explorer",
 }
 `;
 
@@ -30,8 +30,8 @@ exports[`generates correct metadata for: static route 1`] = `
   "opengraph": {
     "description": "",
     "imageUrl": "http://localhost:3000/static/og_placeholder.png",
-    "title": "Blockscout blocks | Blockscout",
+    "title": "Block Explorer",
   },
-  "title": "Blockscout blocks | Blockscout",
+  "title": "Block Explorer",
 }
 `;

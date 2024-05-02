@@ -482,7 +482,7 @@ const schema = yup
     NEXT_PUBLIC_APP_PORT: yup.number().positive().integer(),
 
     // 2. Blockchain parameters
-    NEXT_PUBLIC_NETWORK_NAME: yup.string().required(),
+    NEXT_PUBLIC_NETWORK_NAME: yup.string().optional(),
     NEXT_PUBLIC_NETWORK_SHORT_NAME: yup.string(),
     NEXT_PUBLIC_NETWORK_ID: yup.number().positive().integer().required(),
     NEXT_PUBLIC_NETWORK_RPC_URL: yup.string().test(urlTest),
@@ -537,7 +537,7 @@ const schema = yup
       .array()
       .json()
       .of(footerLinkGroupSchema),
-
+    NEXT_PUBLIC_FOOTER_DISABLED: yup.boolean().optional(),
     //     d. views
     NEXT_PUBLIC_VIEWS_BLOCK_HIDDEN_FIELDS: yup
       .array()
