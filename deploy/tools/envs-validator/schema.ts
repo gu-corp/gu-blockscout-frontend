@@ -537,7 +537,7 @@ const schema = yup
       .array()
       .json()
       .of(footerLinkGroupSchema),
-
+    NEXT_PUBLIC_FOOTER_DISABLED: yup.optional().boolean(),
     //     d. views
     NEXT_PUBLIC_VIEWS_BLOCK_HIDDEN_FIELDS: yup
       .array()
