@@ -5,6 +5,7 @@ import config from 'configs/app';
 
 import Settings from './settings/Settings';
 import SwapButton from './SwapButton';
+import TopBarStats from './TopBarStats';
 
 const feature = config.features.swapButton;
 
@@ -19,7 +20,7 @@ const TopBar = () => {
       justifyContent="space-between"
       alignItems="center"
     >
-      <div/>
+      <TopBarStats/>
       <Flex alignItems="center">
         { feature.isEnabled && (
           <>

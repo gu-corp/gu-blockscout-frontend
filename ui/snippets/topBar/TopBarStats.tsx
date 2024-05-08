@@ -4,14 +4,14 @@ import React from 'react';
 import config from 'configs/app';
 import useApiQuery from 'lib/api/useApiQuery';
 import dayjs from 'lib/date/dayjs';
-import useIsMobile from 'lib/hooks/useIsMobile';
+// import useIsMobile from 'lib/hooks/useIsMobile';
 import { HOMEPAGE_STATS } from 'stubs/stats';
 import GasInfoTooltip from 'ui/shared/gas/GasInfoTooltip';
 import GasPrice from 'ui/shared/gas/GasPrice';
-import TextSeparator from 'ui/shared/TextSeparator';
+// import TextSeparator from 'ui/shared/TextSeparator';
 
 const TopBarStats = () => {
-  const isMobile = useIsMobile();
+  // const isMobile = useIsMobile();
 
   const { data, isPlaceholderData, isError, refetch, dataUpdatedAt } = useApiQuery('stats', {
     queryOptions: {
@@ -51,7 +51,7 @@ const TopBarStats = () => {
       fontSize="xs"
       fontWeight={ 500 }
     >
-      { data?.coin_price && (
+      { /* { data?.coin_price && (
         <Flex columnGap={ 1 }>
           <Skeleton isLoaded={ !isPlaceholderData }>
             <chakra.span color="text_secondary">{ config.chain.currency.symbol } </chakra.span>
@@ -74,7 +74,7 @@ const TopBarStats = () => {
           </Skeleton>
         </Flex>
       ) }
-      { data?.coin_price && config.features.gasTracker.isEnabled && <TextSeparator color="divider"/> }
+      { data?.coin_price && config.features.gasTracker.isEnabled && <TextSeparator color="divider"/> } */ }
       { data?.gas_prices && data.gas_prices.average !== null && config.features.gasTracker.isEnabled && (
         <Skeleton isLoaded={ !isPlaceholderData }>
           <chakra.span color="text_secondary">Gas </chakra.span>
