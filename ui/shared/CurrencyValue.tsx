@@ -28,14 +28,14 @@ const CurrencyValue = ({ value, currency = '', decimals, exchangeRate, className
       </Box>
     );
   }
-  const { valueStr: valueResult, usd: usdResult } = getCurrencyValue({ value, accuracy, accuracyUsd, exchangeRate, decimals });
+  const { valueStr: valueResult } = getCurrencyValue({ value, accuracy, accuracyUsd, exchangeRate, decimals });
 
   return (
     <Box as="span" className={ className } display="inline-flex" rowGap={ 3 } columnGap={ 1 }>
       <Text display="inline-block">
         { valueResult }{ currency ? ` ${ currency }` : '' }
       </Text>
-      { usdResult && <Text as="span" variant="secondary" fontWeight={ 400 }>(${ usdResult })</Text> }
+      {/* { usdResult && <Text as="span" variant="secondary" fontWeight={ 400 }>(${ usdResult })</Text> } */}
     </Box>
   );
 };
