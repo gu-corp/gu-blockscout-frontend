@@ -181,6 +181,9 @@ const Footer = () => {
     );
   };
 
+  // eslint-disable-next-line react/jsx-no-useless-fragment
+  return <></>;
+
   if (config.UI.footer.links) {
     return (
       <Box { ...containerProps }>
