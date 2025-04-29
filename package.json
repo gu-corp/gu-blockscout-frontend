@@ -1,6 +1,6 @@
 {
   "name": "blockscout-frontend",
-  "version": "1.37.4",
+  "version": "1.37.5-gubuild.0",
   "private": false,
   "homepage": "https://github.com/blockscout/frontend#readme",
   "engines": {
