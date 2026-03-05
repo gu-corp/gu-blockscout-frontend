@@ -184,6 +184,11 @@ const Footer = () => {
     );
   };
 
+  // eslint-disable-next-line react/jsx-no-useless-fragment
+  return <></>;
+
+  // eslint-disable-next-line no-unreachable
+
   if (config.UI.footer.links) {
     return (
       <Box { ...containerProps }>

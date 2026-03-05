@@ -43,6 +43,22 @@ const NetworkLogo = ({ isCollapsed, onClick, className }: Props) => {
 
   const logoSrc = useColorModeValue(config.UI.navigation.logo.default, config.UI.navigation.logo.dark || config.UI.navigation.logo.default);
   const iconSrc = useColorModeValue(config.UI.navigation.icon.default, config.UI.navigation.icon.dark || config.UI.navigation.icon.default);
+  // Remove network logo
+  return (
+    <chakra.a
+      as="a"
+      href={ route({ pathname: '/' }) }
+      width={{ base: '120px', lg: isCollapsed === false ? '120px' : '50px', xl: isCollapsed ? '30px' : '120px' }}
+      height={{ base: '24px', lg: isCollapsed === false ? '24px' : '30px', xl: isCollapsed ? '30px' : '24px' }}
+      display="inline-flex"
+      overflow="hidden"
+      onClick={ onClick }
+      flexShrink={ 0 }
+      aria-label="Link to main page"
+    >Home</chakra.a>
+  );
+
+  // eslint-disable-next-line no-unreachable
 
   return (
     <chakra.a
