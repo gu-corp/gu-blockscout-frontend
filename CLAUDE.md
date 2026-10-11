@@ -2,6 +2,151 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
+
+## GU fork: how to support a new upstream version
+
+This repo is a thin fork of [blockscout/frontend](https://github.com/blockscout/frontend).
+The sections after this one are upstream guidance about the app itself. This
+section is GU-specific and takes precedence where the two disagree.
+
+### What we change vs upstream
+
+Exactly four things, nothing else. Keep the diff this small.
+
+| Change | File |
+| --- | --- |
+| `version` set to the version *before* the target (see step 4) | `package.json` |
+| Footer hidden — early `return <></>` | `ui/snippets/footer/Footer.tsx` (newer: `src/shell/footer/Footer.tsx`) |
+| Network logo replaced by a plain `Home` link | `ui/snippets/networkLogo/NetworkLogo.tsx` (newer: `src/slices/chain/logo/NetworkLogo.tsx`) |
+| Upstream CI removed, GU publish workflow added | `.github/workflows/*`, `.husky/` |
+
+Both component changes are written as an **early return followed by the
+untouched upstream body**, with `// eslint-disable-next-line no-unreachable`.
+Do not delete the upstream code — leaving it in place makes the next version
+bump a trivial re-apply instead of a merge.
+
+Upstream reorganises directories between minor versions (`ui/snippets/*` moved
+to `src/shell/*` and `src/slices/*` around v2.9). Locate the files rather than
+assuming a path:
+
+```bash
+find . -path ./node_modules -prune -o -name 'Footer.tsx' -print -o -name 'NetworkLogo.tsx' -print
+```
+
+The config key for the logo moved too (`config.UI.navigation.logo` →
+`config.chain.logo`), but the GU override does not read it, so only the
+surrounding code differs.
+
+### Branch / tag layout
+
+| Thing | Convention | Example |
+| --- | --- | --- |
+| Version branch | `feature/v<UPSTREAM_VERSION>` | `feature/v2.7.2` |
+| Build tag | `v<UPSTREAM_VERSION>-gubuild.<N>` | `v2.7.2-gubuild.0` |
+| Docker image | `gulabs/gu-blockscout-frontend:<BUILD_TAG>` | `gulabs/gu-blockscout-frontend:v2.7.2-gubuild.0` |
+
+One branch per upstream version, each cut fresh from the upstream tag. Branches
+are never merged into each other.
+
+### Procedure
+
+Replace `2.7.2` with the target version throughout.
+
+**1. Fetch the upstream tag.** The `upstream` remote is usually not configured:
+
+```bash
+git remote add upstream https://github.com/blockscout/frontend.git   # once
+git fetch upstream tag v2.7.2 --no-tags
+```
+
+**2. Cut the branch from the upstream tag** — never from a previous
+`feature/*` branch:
+
+```bash
+git checkout -b feature/v2.7.2 v2.7.2
+```
+
+**3. Re-apply the four changes.** Copy the publish workflow forward from the
+previous version branch:
+
+```bash
+git rm -r .husky .github/workflows
+mkdir -p .github/workflows
+git show feature/v2.9.4:.github/workflows/publish.yml > .github/workflows/publish.yml
+```
+
+`publish.yml` is version-independent — no edit needed.
+
+**4. Set `package.json` `version` to one patch BELOW the target.**
+
+This is the step that is easy to get wrong. The workflow runs
+`npm version prerelease --preid gubuild`, which bumps the **patch** and appends
+`-gubuild.0`. So to produce the tag `v2.7.2-gubuild.0`, `package.json` must say
+`2.7.1`:
+
+```
+2.7.1  --prerelease-->  2.7.2-gubuild.0
+2.9.3  --prerelease-->  2.9.4-gubuild.0
+```
+
+Upstream ships `package.json` with `"version": "1.0.0"` — it is a placeholder,
+always overwrite it.
+
+**5. Commit and push the branch:**
+
+```bash
+git push -u origin feature/v2.7.2
+```
+
+**6. Build.** Unlike the backend, this workflow is dispatched on the **branch**,
+not on a tag — it commits the version bump and pushes the tag itself:
+
+```bash
+gh workflow run publish.yml --repo gu-corp/gu-blockscout-frontend \
+  --ref feature/v2.7.2 -f bump=build -f publish-docker-image=true
+```
+
+`bump` options: `build` (prerelease, the normal case), `patch`, `minor`,
+`major`. The workflow then: bumps the version → pushes the commit and tag to
+the branch → creates a GitHub release → builds and pushes the multi-arch image
+(`linux/amd64`, `linux/arm64/v8`) to Docker Hub. Expect roughly 20–40 minutes.
+
+Afterwards `git pull` the branch to pick up the bump commit the workflow made.
+
+**7. Verify:**
+
+```bash
+docker run --rm --entrypoint node gulabs/gu-blockscout-frontend:v2.7.2-gubuild.0 \
+  -e "console.log(require('/app/package.json').version)"
+```
+
+(`--entrypoint` is required — the image's entrypoint is `./entrypoint.sh`,
+which validates the runtime ENVs and would fail without a full config.)
+
+Pair the image with a compatible backend build from `gu-blockscout` (see that
+repo's `CLAUDE.md`); upstream releases backend and frontend in matching pairs.
+
+### Required repository secrets
+
+`DOCKERHUB_USERNAME`, `DOCKERHUB_ACCESS_TOKEN` — note the frontend uses
+`_ACCESS_TOKEN` while the backend repo uses `_PASSWORD`.
+
+### Known quirks
+
+- **`GIT_TAG` build-arg is always empty.** The workflow sets it from
+  `github.ref_type == 'tag'`, but we dispatch on a branch, so it resolves to
+  `''`. It only feeds the frontend-version link in the footer, and the footer
+  is hidden in GU builds, so this is cosmetic.
+- **The repo default branch (`main-v1.29.2`) is stale.** It matters only
+  because GitHub requires `publish.yml` to exist there for `workflow_dispatch`
+  to be dispatchable at all.
+- **`prepare: husky install` stays in `package.json`** even though `.husky/` is
+  deleted. It is harmless: the Docker build never copies `.husky/`, and husky
+  recreates the directory if it is missing.
+
+---
+
 ## Commands
 
 ```bash

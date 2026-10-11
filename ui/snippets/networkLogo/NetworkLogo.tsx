@@ -30,6 +30,22 @@ const NetworkLogo = ({ className }: Props) => {
 
   const logoSrc = useColorModeValue(config.UI.navigation.logo.default, config.UI.navigation.logo.dark || config.UI.navigation.logo.default);
 
+  // Remove network logo
+  return (
+    <chakra.a
+      className={ className }
+      href={ route({ pathname: '/' }) }
+      width="120px"
+      height="24px"
+      display="inline-flex"
+      alignItems="center"
+      overflow="hidden"
+      flexShrink={ 0 }
+      aria-label="Link to main page"
+    >Home</chakra.a>
+  );
+
+  // eslint-disable-next-line no-unreachable
   return (
     <chakra.a
       className={ className }
