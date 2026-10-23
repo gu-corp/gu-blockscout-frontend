@@ -1,5 +1,5 @@
 name: Publish new version
-run-name: Publish new ${{ inputs.bump }} version from ${{ github.ref_name }} by @${{ github.actor }}
+run-name: ${{ inputs.tag != '' && format('Publish image {0}', inputs.tag) || format('Publish new {0} version from {1}', inputs.bump, github.ref_name) }} by @${{ github.actor }}
 
 on:
   workflow_dispatch:
@@ -19,13 +19,23 @@ on:
         required: true
         type: boolean
         default: true
+      tag:
+        description: "Existing tag to (re)build the image for. Skips the version bump and release; 'bump' is ignored"
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.actor }}
   cancel-in-progress: true
 
+env:
+  IMAGE: gulabs/gu-blockscout-frontend
+  CACHE_IMAGE: ghcr.io/gu-corp/gu-blockscout-frontend
+
 jobs:
   publish-version:
+    if: ${{ inputs.tag == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,7 +59,7 @@ jobs:
           git push origin ${{ steps.generate_version.outputs.version }}
     outputs:
       version: ${{ steps.generate_version.outputs.version }}
-  
+
   create-release:
     needs: publish-version
     runs-on: ubuntu-latest
@@ -71,43 +81,107 @@ jobs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
       version: ${{ needs.publish-version.outputs.version }}
 
-  push_to_registry:
-    name: Push Docker image to Docker Hub
-    if: ${{ inputs.publish-docker-image == true }}
+  # Each platform is built natively on its own runner (no QEMU) and pushed by digest;
+  # the merge job below assembles the multi-arch tag.
+  build-image:
+    name: Build Docker image (${{ matrix.arch }})
     needs: publish-version
-    runs-on: ubuntu-latest
+    if: ${{ !cancelled() && !failure() && inputs.publish-docker-image }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ inputs.tag || needs.publish-version.outputs.version }}
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        with:
+          ref: ${{ env.VERSION }}
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: gulabs/gu-blockscout-frontend
-      - name: Login to GitHub Container Registry
+          images: ${{ env.IMAGE }}
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Add SHORT_SHA env property with commit short sha
-        run: echo "SHORT_SHA=`echo ${GITHUB_SHA} | cut -c1-8`" >> $GITHUB_ENV
-      - name: Build and push
+        run: echo "SHORT_SHA=$(git rev-parse --short=8 HEAD)" >> "$GITHUB_ENV"
+      - name: Build and push by digest
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./Dockerfile
-          push: true
-          cache-from: type=gha
-          tags: gulabs/gu-blockscout-frontend:${{ needs.publish-version.outputs.version }}
-          platforms: |
-            linux/amd64
-            linux/arm64/v8
+          platforms: linux/${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache-${{ matrix.arch }},mode=max,ignore-error=true
           build-args: |
             GIT_COMMIT_SHA=${{ env.SHORT_SHA }}
-            GIT_TAG=${{ github.ref_type == 'tag' && needs.publish-version.outputs.version || '' }}
-            ${{ inputs.build_args }}
+            GIT_TAG=${{ github.ref_type == 'tag' && env.VERSION || '' }}
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    needs: [publish-version, build-image]
+    if: ${{ !cancelled() && !failure() && inputs.publish-docker-image }}
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.tag || needs.publish-version.outputs.version }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+      - name: Create multi-arch manifest and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          test -n "$VERSION"
+          sources=()
+          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create -t "$IMAGE:$VERSION" "${sources[@]}"
+      - name: Inspect image
+        run: docker buildx imagetools inspect "$IMAGE:$VERSION"
