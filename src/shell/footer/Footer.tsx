@@ -219,6 +219,10 @@ const Footer = () => {
     return <FooterCookieSettings gridArea={ gridArea }/>;
   };
 
+  // eslint-disable-next-line react/jsx-no-useless-fragment
+  return <></>;
+
+  // eslint-disable-next-line no-unreachable
   if (config.shell.footer.links) {
     return (
       <Box { ...containerProps }>
