@@ -1,0 +1,187 @@
+name: Publish new version
+run-name: ${{ inputs.tag != '' && format('Publish image {0}', inputs.tag) || format('Publish new {0} version from {1}', inputs.bump, github.ref_name) }} by @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Positionals'
+        required: true
+        type: choice
+        default: 'build'
+        options:
+          - major
+          - minor
+          - patch
+          - build
+      publish-docker-image:
+        description: "Publish to docker hub"
+        required: true
+        type: boolean
+        default: true
+      tag:
+        description: "Existing tag to (re)build the image for. Skips the version bump and release; 'bump' is ignored"
+        required: false
+        type: string
+        default: ''
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.actor }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: gulabs/gu-blockscout-frontend
+  CACHE_IMAGE: ghcr.io/gu-corp/gu-blockscout-frontend
+
+jobs:
+  publish-version:
+    if: ${{ inputs.tag == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - name: Generate Version
+        id: generate_version
+        run: |
+          git config user.name ${{ github.actor }}
+          git config user.email ${{ github.actor }}@users.noreply.github.com
+          if [ ${{ inputs.bump }} == major ]; then BUMP='premajor'; fi
+          if [ ${{ inputs.bump }} == minor ]; then BUMP='preminor'; fi
+          if [ ${{ inputs.bump }} == patch ]; then BUMP='prepatch'; fi
+          if [ ${{ inputs.bump }} == build ]; then BUMP='prerelease'; fi
+          npm version $BUMP --preid gubuild --force-publish --yes
+          git push origin ${{ github.ref }}
+          echo "version=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
+      - name: Push Git Tag
+        run: |
+          git push origin ${{ steps.generate_version.outputs.version }}
+    outputs:
+      version: ${{ steps.generate_version.outputs.version }}
+
+  create-release:
+    needs: publish-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish-version.outputs.version }}
+      - name: Create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ needs.publish-version.outputs.version }}
+          release_name: Release - ${{ needs.publish-version.outputs.version }}
+          draft: false
+          prerelease: false
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ needs.publish-version.outputs.version }}
+
+  # Each platform is built natively on its own runner (no QEMU) and pushed by digest;
+  # the merge job below assembles the multi-arch tag.
+  build-image:
+    name: Build Docker image (${{ matrix.arch }})
+    needs: publish-version
+    if: ${{ !cancelled() && !failure() && inputs.publish-docker-image }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ inputs.tag || needs.publish-version.outputs.version }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.VERSION }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add SHORT_SHA env property with commit short sha
+        run: echo "SHORT_SHA=$(git rev-parse --short=8 HEAD)" >> "$GITHUB_ENV"
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.CACHE_IMAGE }}:buildcache-${{ matrix.arch }},mode=max,ignore-error=true
+          build-args: |
+            GIT_COMMIT_SHA=${{ env.SHORT_SHA }}
+            GIT_TAG=${{ github.ref_type == 'tag' && env.VERSION || '' }}
+      - name: Export digest
+        run: |
+          mkdir -p ${{ runner.temp }}/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  push_to_registry:
+    name: Push Docker image to Docker Hub
+    needs: [publish-version, build-image]
+    if: ${{ !cancelled() && !failure() && inputs.publish-docker-image }}
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.tag || needs.publish-version.outputs.version }}
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_ACCESS_TOKEN }}
+      - name: Create multi-arch manifest and push
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          test -n "$VERSION"
+          sources=()
+          for digest in *; do sources+=("$IMAGE@sha256:$digest"); done
+          docker buildx imagetools create -t "$IMAGE:$VERSION" "${sources[@]}"
+      - name: Inspect image
+        run: docker buildx imagetools inspect "$IMAGE:$VERSION"
